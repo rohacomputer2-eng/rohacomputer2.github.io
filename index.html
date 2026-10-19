@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roha Computer Solution</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b2030;--mut:#667;--pri:#1d4ed8;--bd:#dde1ea}
+@media (prefers-color-scheme:dark){:root{--bg:#10131c;--card:#1a1f2d;--tx:#eef0f6;--mut:#99a;--pri:#6b9bff;--bd:#2c3347}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif}
+header{padding:18px 16px;background:var(--pri);color:#fff;display:flex;justify-content:space-between;align-items:center}
+header h1{margin:0;font-size:22px}header p{margin:2px 0 0;opacity:.9;font-size:13px}
+nav{display:flex;gap:6px;padding:10px 12px;overflow-x:auto}
+nav button{border:1px solid var(--bd);background:var(--card);color:var(--tx);padding:8px 14px;border-radius:20px;cursor:pointer;white-space:nowrap}
+nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+main{max-width:1000px;margin:0 auto;padding:8px 12px 40px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat b{display:block;font-size:22px}.stat span{color:var(--mut);font-size:13px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:3px}
+input,select{padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;width:100%}
+.btn{background:var(--pri);color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;font:inherit;align-self:end}
+.btn.g{background:transparent;color:var(--pri);border:1px solid var(--bd)}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:8px;border-bottom:1px solid var(--bd);text-align:left;font-size:14px}th{color:var(--mut);font-size:12px}
+.x{color:#c00;cursor:pointer;background:none;border:0;font-size:16px}
+.bar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}.bar input{flex:1;min-width:140px}
+.tag{padding:2px 8px;border-radius:10px;font-size:12px;border:1px solid var(--bd)}
+.login{max-width:360px;margin:40px auto}.login form{grid-template-columns:1fr}.err{color:#c00;font-size:13px}
+</style>
+</head>
+<body>
+<header><div><h1>🖨️ Roha Computer Solution</h1><p>Sales &amp; maintenance — printers, computers and spare parts</p></div><button class="btn g" id="out" style="display:none;color:#fff;border-color:#fff" onclick="logout()">Logout</button></header>
+<nav id="nav"></nav>
+<main id="app"></main>
+<script>
+const CAT=['Printer','Computer','Laptop','Spare part','Other'];
+const T={
+ stock:{label:'Stock',f:[['date','Date','date'],['category','Category','sel',CAT],['brand','Brand'],['model','Model'],['qty','Qty','number'],['price','Price (ETB)','number']]},
+ sales:{label:'Sales',f:[['date','Date','date'],['customer','Customer'],['category','Category','sel',CAT],['brand','Brand'],['model','Model'],['price','Price (ETB)','number']]},
+ service:{label:'Service',f:[['date','Date','date'],['customer','Customer'],['phone','Phone'],['device','Device','sel',['Printer','Computer','Laptop','Other']],['brand','Brand'],['model','Model'],['problem','Problem'],['cost','Cost (ETB)','number'],['status','Status','sel',['Pending','In repair','Done']]]}
+};
+let tok=localStorage.getItem('roha_tok'),D={stock:[],sales:[],service:[]},tab='home',q='';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sum=(a,k)=>a.reduce((n,r)=>n+(+r[k]||0),0);
+const fmt=n=>n.toLocaleString()+' ETB';
+const today=()=>new Date().toISOString().slice(0,10);
+
+async function api(p,o={}){
+ const r=await fetch('/api'+p,{...o,headers:{'Content-Type':'application/json',Authorization:'Bearer '+tok},body:o.body?JSON.stringify(o.body):undefined});
+ const j=await r.json();
+ if(r.status==401&&tok){logout();throw new Error('Session expired')}
+ if(!r.ok)throw new Error(j.error||'Error');return j}
+function logout(){tok=null;localStorage.removeItem('roha_tok');start()}
+async function loadAll(){for(const k in T)D[k]=await api('/records/'+k)}
+
+async function start(){
+ document.getElementById('nav').innerHTML='';
+ if(tok){try{await loadAll();document.getElementById('out').style.display='';return render()}catch(e){tok=null}}
+ document.getElementById('out').style.display='none';
+ const {setup}=await (await fetch('/api/status')).json();
+ document.getElementById('app').innerHTML=`<div class="card login"><h3>${setup?'Create owner account':'Login'}</h3>
+ <form onsubmit="doAuth(event,${setup})"><label>Email<input name="email" type="email" required></label>
+ <label>Password<input name="password" type="password" minlength="6" required></label>
+ <div class="err" id="err"></div><button class="btn">${setup?'Create account':'Login'}</button></form></div>`}
+async function doAuth(e,setup){e.preventDefault();const o=Object.fromEntries(new FormData(e.target));
+ try{const r=await fetch('/api/'+(setup?'register':'login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)});
+ const j=await r.json();if(!r.ok)throw new Error(j.error);tok=j.token;localStorage.setItem('roha_tok',tok);tab='home';start()}
+ catch(x){document.getElementById('err').textContent=x.message}}
+
+function nav(){document.getElementById('nav').innerHTML=[['home','Dashboard'],...Object.entries(T).map(([k,v])=>[k,v.label])]
+ .map(([k,l])=>`<button class="${tab==k?'on':''}" onclick="go('${k}')">${l}</button>`).join('')}
+function go(t){tab=t;q='';render()}
+
+function render(){nav();const a=document.getElementById('app');
+ if(tab=='home'){
+  const pend=D.service.filter(r=>r.status!='Done').length;
+  a.innerHTML=`<div class="card grid">
+   <div class="stat"><b>${fmt(sum(D.sales,'price'))}</b><span>Total sales</span></div>
+   <div class="stat"><b>${fmt(sum(D.service,'cost'))}</b><span>Service income</span></div>
+   <div class="stat"><b>${sum(D.stock,'qty')}</b><span>Items in stock</span></div>
+   <div class="stat"><b>${pend}</b><span>Open repair jobs</span></div></div>
+  <div class="card"><b>Our services</b><p>Sales of printers, computers and laptops · Repair &amp; maintenance · Spare parts supply.</p>
+  <p style="color:var(--mut);font-size:13px">Data is stored online on the server. Only logged-in users can see it.</p>
+  <button class="btn g" onclick="exportAll()">Export all data (CSV)</button></div>`;return}
+ const t=T[tab];
+ a.innerHTML=`<div class="card"><form onsubmit="add(event)">${t.f.map(([k,l,ty,o])=>
+  `<label>${l}${ty=='sel'?`<select name="${k}">${o.map(x=>`<option>${x}</option>`).join('')}</select>`:
+  `<input name="${k}" type="${ty||'text'}" ${ty=='date'?`value="${today()}"`:''} ${ty=='number'?'min="0" step="any"':''} ${['brand','model','date'].includes(k)?'required':''}>`}</label>`).join('')}
+  <button class="btn">+ Add ${t.label}</button></form></div>
+  <div class="card"><div class="bar"><input placeholder="Search brand, model, customer..." value="${esc(q)}" oninput="q=this.value;list()"><button class="btn g" onclick="exportCsv('${tab}')">Export CSV</button></div><div class="wrap" id="list"></div></div>`;
+ list()}
+
+function list(){const t=T[tab],el=document.getElementById('list');
+ const rows=D[tab].filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())).reverse();
+ el.innerHTML=rows.length?`<table><tr>${t.f.map(f=>`<th>${f[1]}</th>`).join('')}<th></th></tr>${rows.map(r=>
+  `<tr>${t.f.map(([k])=>`<td>${k=='status'?`<span class="tag">${esc(r[k])}</span>`:esc(r[k])}</td>`).join('')}<td><button class="x" title="Delete" onclick="del(${r.id})">✕</button></td></tr>`).join('')}</table>`
+  :'<p style="color:var(--mut)">No records yet.</p>'}
+
+async function add(e){e.preventDefault();const o=Object.fromEntries(new FormData(e.target));
+ try{await api('/records/'+tab,{method:'POST',body:o});D[tab]=await api('/records/'+tab);render()}catch(x){alert(x.message)}}
+async function del(id){if(!confirm('Delete this record?'))return;
+ try{await api(`/records/${tab}/${id}`,{method:'DELETE'});D[tab]=await api('/records/'+tab);list()}catch(x){alert(x.message)}}
+function csv(k){const f=T[k].f;return [f.map(x=>x[1]),...D[k].map(r=>f.map(([c])=>r[c]??''))]
+ .map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n')}
+function dl(name,txt){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'}));a.download=name;a.click()}
+function exportCsv(k){dl('roha-'+k+'.csv',csv(k))}
+function exportAll(){dl('roha-all.csv',Object.keys(T).map(k=>'# '+T[k].label+'\n'+csv(k)).join('\n\n'))}
+start();
+</script>
+</body>
+</html>
